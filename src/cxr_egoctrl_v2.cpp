@@ -1,3 +1,4 @@
+      
 /**
  * 基于状态机的 EGO-Planner 轨迹跟踪控制器
  * Logic:
@@ -48,7 +49,6 @@ ros::Time last_traj_time; // 记录上一次收到 EGO 轨迹的时间
 int rc_value = 0;
 
 // 位置 PID 控制器
-PID::pos_controller_PID pos_controller_pid; // 位置 PID 控制器实例
 Eigen::Vector3d current_velocity = Eigen::Vector3d::Zero(); // 当前速度(用于 D 项阻尼)
 Eigen::Vector3d ego_vel_feedforward = Eigen::Vector3d::Zero(); // EGO前馈速度
 
@@ -147,17 +147,17 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "fsm_ego_control");
     ros::NodeHandle nh;
-    
+    PID::pos_controller_PID pos_controller_pid; // 位置 PID 控制器实例
     // 订阅与发布
-    ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>("/mavros/state", 10, state_cb);
-    ros::Subscriber position_sub = nh.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom", 10, position_cb);
+    ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>("/iris_0/mavros/state", 10, state_cb);
+    ros::Subscriber position_sub = nh.subscribe<nav_msgs::Odometry>("/iris_0/mavros/local_position/odom", 10, position_cb);
     ros::Subscriber twist_sub = nh.subscribe<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10, twist_cb);
-    ros::Subscriber rc_sub = nh.subscribe<mavros_msgs::RCIn>("/mavros/rc/in", 10, rc_cb);
-    ros::Publisher local_pos_pub = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 1);
+    ros::Subscriber rc_sub = nh.subscribe<mavros_msgs::RCIn>("/iris_0/mavros/rc/in", 10, rc_cb);
+    ros::Publisher local_pos_pub = nh.advertise<mavros_msgs::PositionTarget>("/iris_0/mavros/setpoint_raw/local", 1);
     
     // 服务客户端
-    ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");// 解锁
-    ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");// 切换飞控模式
+    ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>("/iris_0/mavros/cmd/arming");// 解锁
+    ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>("/iris_0/mavros/set_mode");// 切换飞控模式
 
     ros::Rate rate(50.0); // 50Hz 控制频率
 
@@ -199,10 +199,14 @@ int main(int argc, char **argv)
     //
     ros::Time last_loop_time = ros::Time::now();
     double delta_time = 0;
+    Eigen::Vector3d pos_error = Eigen::Vector3d::Zero();
+    Eigen::Vector3d vel_cmd = Eigen::Vector3d::Zero();
     ROS_INFO("FSM Initialized. State: READY");
 
     while(ros::ok())
     {   
+        pos_error.setZero();
+        vel_cmd.setZero();
         ros::Time now = ros::Time::now();
         delta_time = (now - last_loop_time).toSec();
         last_loop_time = now;
@@ -377,3 +381,5 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
+    
