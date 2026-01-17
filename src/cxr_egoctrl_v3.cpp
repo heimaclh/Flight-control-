@@ -1,4 +1,4 @@
-      
+// V3版本加入了EXPLORE的速度档位选择功能
 /**
  * 基于状态机的 EGO-Planner 轨迹跟踪控制器
  * Logic:
@@ -7,7 +7,6 @@
  * 3. EXPLORE: 接收 EGO 轨迹并执行速度跟踪
  * 4. AUTO_LAND: 触发降落
  * 5. MANUAL_LAND: 监测落地并上锁
-  本版本修改第7通道为autoland触发
  */
 
 #include <ros/ros.h>
@@ -78,6 +77,19 @@ unsigned short velocity_mask = 0b101111000111;
 // 参数设置
 double takeoff_height = 0.4; // 起飞高度
 double reach_err = 0.1;      // 位置误差阈值
+
+// EXPLORE的速度档位
+struct SpeedLimit {
+    double max_vel_xy; // 水平速度上限
+    double max_vel_z;  // 垂直速度上限
+};
+SpeedLimit speed_gears[] = {
+    {0.5, 0.5},  // [0] 慢速/调试模式：很慢，适合初次测试
+    {1.5, 1.0},  // [1] 标准模式：适合正常飞行
+    {2.5, 2.0},  // [2] 运动模式：速度较快
+    {5.0, 3.0}   // [3] 狂暴模式：极速（慎用）
+};
+int USE_GEAR_INDEX = 1; // 速度默认使用标准模式
 
 // 回调函数
 void state_cb(const mavros_msgs::State::ConstPtr& msg){
@@ -305,14 +317,20 @@ int main(int argc, char **argv)
                 //EGO 知道下一刻要加速还是减速，PID 只是负责修误差
                 vel_cmd += ego_vel_feedforward;
 
+                int max_gear_idx = sizeof(speed_gears)/sizeof(speed_gears[0]) - 1;
+                if (USE_GEAR_INDEX > max_gear_idx) USE_GEAR_INDEX = max_gear_idx;
+
+                double limit_xy = speed_gears[USE_GEAR_INDEX].max_vel_xy;
+                double limit_z  = speed_gears[USE_GEAR_INDEX].max_vel_z;
                 //赋值并限幅
-                current_goal.velocity.x = limit_velocity(vel_cmd(0), 2.0);
-                current_goal.velocity.y = limit_velocity(vel_cmd(1), 2.0);
-                current_goal.velocity.z = limit_velocity(vel_cmd(2), 1.5);
+                current_goal.velocity.x = limit_velocity(vel_cmd(0), limit_xy);
+                current_goal.velocity.y = limit_velocity(vel_cmd(1), limit_xy);
+                current_goal.velocity.z = limit_velocity(vel_cmd(2), limit_z);
                 
                 current_goal.yaw = ego_yaw;
-                //与当前目标点距离
-                ROS_INFO_THROTTLE(2.0, "Tracking: Err=%.2f, Vel=%.2f", pos_error.norm(), vel_cmd.norm());
+                //与当前目标点距离,
+                ROS_INFO_THROTTLE(2.0, "Tracking: Err=%.2f, Vel=%.2f | Current Gear: %d (Limit: %.1f)", 
+                                  pos_error.norm(), vel_cmd.norm(), USE_GEAR_INDEX, limit_xy);
             }
             else
             {
